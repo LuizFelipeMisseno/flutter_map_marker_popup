@@ -21,6 +21,7 @@ class PopupMarkerLayer extends StatefulWidget {
 class _PopupMarkerLayerState extends State<PopupMarkerLayer> {
   late PopupControllerImpl _popupControllerImpl;
   bool _shouldDisposePopupController = false;
+  final _popupKey = GlobalKey();
 
   @override
   void initState() {
@@ -62,10 +63,12 @@ class _PopupMarkerLayerState extends State<PopupMarkerLayer> {
             mapController: flutter_map.MapController.of(context),
             popupState: popupState,
             popupController: _popupControllerImpl,
+            popupkey: _popupKey,
           ),
           if (widget.options.popupDisplayOptions != null)
             PopupLayer(
               popupDisplayOptions: widget.options.popupDisplayOptions!,
+              key: _popupKey,
             ),
         ],
       ),

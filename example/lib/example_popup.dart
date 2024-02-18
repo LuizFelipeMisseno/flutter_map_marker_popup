@@ -11,16 +11,14 @@ class ExamplePopup extends StatefulWidget {
 }
 
 class _ExamplePopupState extends State<ExamplePopup> {
-  final List<IconData> _icons = [
-    Icons.star_border,
-    Icons.star_half,
-    Icons.star
-  ];
+  final List<IconData> _icons = [Icons.star_border, Icons.star_half, Icons.star];
   int _currentIcon = 0;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Container(
+      height: 400,
+      color: Colors.white,
       child: InkWell(
         onTap: () => setState(() {
           _currentIcon = (_currentIcon + 1) % _icons.length;

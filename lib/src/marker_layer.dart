@@ -2,9 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_popup/extension_api.dart';
 import 'package:flutter_map_marker_popup/src/options/popup_marker_layer_options.dart';
 import 'package:flutter_map_marker_popup/src/popup_spec.dart';
 import 'package:flutter_map_marker_popup/src/state/popup_state.dart';
+import 'package:geodesy/geodesy.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'controller/popup_controller.dart';
@@ -16,6 +19,7 @@ class MarkerLayer extends StatefulWidget {
   final MapController mapController;
   final PopupState popupState;
   final PopupController popupController;
+  final GlobalKey? popupkey;
 
   const MarkerLayer({
     super.key,
@@ -24,14 +28,14 @@ class MarkerLayer extends StatefulWidget {
     required this.mapController,
     required this.popupState,
     required this.popupController,
+    this.popupkey,
   });
 
   @override
   State<MarkerLayer> createState() => _MarkerLayerState();
 }
 
-class _MarkerLayerState extends State<MarkerLayer>
-    with SingleTickerProviderStateMixin {
+class _MarkerLayerState extends State<MarkerLayer> with SingleTickerProviderStateMixin {
   late AnimationController _centerMarkerController;
   void Function()? _animationListener;
 
@@ -64,10 +68,8 @@ class _MarkerLayerState extends State<MarkerLayer>
         children: (List<Marker> markers) sync* {
           for (final m in markers) {
             // Resolve real alignment
-            final left =
-                0.5 * m.width * ((m.alignment ?? Alignment.center).x + 1);
-            final top =
-                0.5 * m.height * ((m.alignment ?? Alignment.center).y + 1);
+            final left = 0.5 * m.width * ((m.alignment ?? Alignment.center).x + 1);
+            final top = 0.5 * m.height * ((m.alignment ?? Alignment.center).y + 1);
             final right = m.width - left;
             final bottom = m.height - top;
 
@@ -88,8 +90,7 @@ class _MarkerLayerState extends State<MarkerLayer>
             var markerChild = m.child;
             if (widget.layerOptions.selectedMarkerBuilder != null &&
                 widget.popupState.isSelected(m)) {
-              markerChild =
-                  widget.layerOptions.selectedMarkerBuilder!(context, m);
+              markerChild = widget.layerOptions.selectedMarkerBuilder!(context, m);
             }
             final markerWithGestureDetector = GestureDetector(
               onTap: () {
@@ -131,8 +132,49 @@ class _MarkerLayerState extends State<MarkerLayer>
     final markerLayerAnimation = widget.layerOptions.markerCenterAnimation;
     if (markerLayerAnimation == null) return;
 
+    final fitPopupOnScreen = markerLayerAnimation.fitPopupOnScreen;
+
+    double? topExtra;
+
+    final popupHeight = widget.popupkey?.currentContext?.size?.height;
+
+    if (fitPopupOnScreen && popupHeight != null) {
+      switch (widget.layerOptions.popupDisplayOptions?.snap) {
+        case PopupSnap.markerTop:
+          final zoomLevel = widget.mapCamera.zoom;
+          MediaQueryData mediaQueryData = MediaQuery.of(context);
+          double screenWidth = mediaQueryData.size.width;
+          double screenHeight = mediaQueryData.size.height;
+          double screenAspectRatio = screenWidth / screenHeight;
+
+          double mapResolution = zoomLevel * screenAspectRatio;
+
+          final popupBottomLatLng = marker.point.add(
+            y: marker.height / mapResolution,
+          );
+          final mapTopBound = widget.mapCamera.visibleBounds.north;
+
+          CustomPoint<num> popupBottomPosition =
+              const Epsg3857().latLngToPoint(popupBottomLatLng, zoomLevel);
+
+          CustomPoint<num> mapTopPosition = const Epsg3857()
+              .latLngToPoint(LatLng(mapTopBound, popupBottomLatLng.longitude), zoomLevel);
+
+          final distanceToTop = mapTopPosition.y - popupBottomPosition.y;
+
+          if (distanceToTop < popupHeight) {
+            final differenceInPixels = popupHeight - distanceToTop;
+            final latLngPixelsScale = differenceInPixels / mapResolution;
+            topExtra = latLngPixelsScale;
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
     final center = widget.mapCamera.center;
-    final tween = LatLngTween(begin: center, end: marker.point);
+    final tween = LatLngTween(begin: center, end: marker.point.add(y: topExtra));
 
     Animation<double> animation = CurvedAnimation(
       parent: _centerMarkerController,
@@ -157,5 +199,11 @@ class _MarkerLayerState extends State<MarkerLayer>
         ..reset();
       _animationListener = null;
     });
+  }
+}
+
+extension LatLngUtils on LatLng {
+  LatLng add({double? x, double? y}) {
+    return LatLng(latitude + (y ?? 0), longitude + (x ?? 0));
   }
 }
